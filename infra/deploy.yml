@@ -1,68 +1,37 @@
 - name: Deploy Laravel API
 hosts: all
-become: yes
-vars:
-  project_dir: /opt/laravel-api
-  docker_image: ""{{ docker_image | default('tu-usuario/laravel-api:latest') }}""
+become: true
 
 tasks:
-  - name: Update system and install dependencies
-    apt:
-      name: 
-        - docker.io
-        - docker-compose
-      state: present
-      update_cache: yes
-
-  - name: Ensure Docker service is running
-    service:
-      name: docker
-      state: started
-      enabled: yes
-
   - name: Create app directory
     file:
-      path: ""{{ project_dir }}""
+      path: /opt/laravel-api
       state: directory
       mode: '0755'
 
-  - name: Copy production docker-compose
+  - name: Copy docker-compose file
     copy:
       src: ../docker-compose.prod.yml
-      dest: ""{{ project_dir }}/docker-compose.yml""
+      dest: /opt/laravel-api/docker-compose.yml
 
-  - name: Pull latest image
-    shell: |
-      cd {{ project_dir }}
-      docker-compose pull
+  - name: Pull latest Docker image
+    shell: docker-compose pull
+    args:
+      chdir: /opt/laravel-api
     environment:
       DOCKER_IMAGE_NAME: ""{{ docker_image }}""
 
-  - name: Deploy containers
-    shell: |
-      cd {{ project_dir }}
-      docker-compose down
-      docker-compose up -d
+  - name: Start containers
+    shell: docker-compose down && docker-compose up -d
+    args:
+      chdir: /opt/laravel-api
     environment:
       DOCKER_IMAGE_NAME: ""{{ docker_image }}""
 
   - name: Fix permissions and Migrate DB
     shell: |
-      cd {{ project_dir }}
       sleep 10
       docker-compose exec -T app chmod -R 777 storage bootstrap/cache
-      docker-compose exec -T app php artisan config:clear
       docker-compose exec -T app php artisan migrate --force
-
-  - name: Health Check
-    uri:
-      url: http://localhost/api/productos
-      method: GET
-      status_code: 200
-      timeout: 30
-    register: health_check
-    until: health_check.status == 200
-    retries: 5
-    delay: 10
-    ignore_errors: yes
-# Force update encoding
+    args:
+      chdir: /opt/laravel-api
