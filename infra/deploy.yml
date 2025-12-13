@@ -1,4 +1,4 @@
-- name: Desplegar API Laravel
+ï»¿- name: Deploy Laravel API
 hosts: all
 become: yes
 vars:
@@ -6,7 +6,7 @@ vars:
   docker_image: ""{{ docker_image | default('tu-usuario/laravel-api:latest') }}""
 
 tasks:
-  - name: Actualizar sistema e instalar dependencias
+  - name: Update system and install dependencies
     apt:
       name: 
         - docker.io
@@ -14,37 +14,36 @@ tasks:
       state: present
       update_cache: yes
 
-  - name: Asegurar que el servicio Docker está corriendo
+  - name: Ensure Docker service is running
     service:
       name: docker
       state: started
       enabled: yes
 
-  - name: Crear directorio de aplicación
+  - name: Create app directory
     file:
       path: ""{{ project_dir }}""
       state: directory
       mode: '0755'
 
-  - name: Copiar docker-compose de producción
+  - name: Copy production docker-compose
     copy:
       src: ../docker-compose.prod.yml
       dest: ""{{ project_dir }}/docker-compose.yml""
   
-  # Si el registro es privado, descomentar:
-  # - name: Login en Docker Hub
+  # - name: Login to Docker Hub (Private Registry)
   #   docker_login:
   #     username: ""{{ lookup('env', 'DOCKER_USERNAME') }}""
   #     password: ""{{ lookup('env', 'DOCKER_PASSWORD') }}""
 
-  - name: Halar última versión de la imagen
+  - name: Pull latest image
     shell: |
       cd {{ project_dir }}
       docker-compose pull
     environment:
       DOCKER_IMAGE_NAME: ""{{ docker_image }}""
 
-  - name: Desplegar contenedores
+  - name: Deploy containers
     shell: |
       cd {{ project_dir }}
       docker-compose down
@@ -52,7 +51,7 @@ tasks:
     environment:
       DOCKER_IMAGE_NAME: ""{{ docker_image }}""
 
-  - name: Corregir permisos y migrar BD
+  - name: Fix permissions and Migrate DB
     shell: |
       cd {{ project_dir }}
       sleep 10
@@ -60,7 +59,7 @@ tasks:
       docker-compose exec -T app php artisan config:clear
       docker-compose exec -T app php artisan migrate --force
 
-  - name: Verificar endpoint de salud
+  - name: Health Check
     uri:
       url: http://localhost/api/productos
       method: GET
