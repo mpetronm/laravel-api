@@ -1,4 +1,4 @@
-﻿- name: Deploy Laravel API
+- name: Deploy Laravel API
 hosts: all
 become: yes
 vars:
@@ -30,11 +30,6 @@ tasks:
     copy:
       src: ../docker-compose.prod.yml
       dest: ""{{ project_dir }}/docker-compose.yml""
-  
-  # - name: Login to Docker Hub (Private Registry)
-  #   docker_login:
-  #     username: ""{{ lookup('env', 'DOCKER_USERNAME') }}""
-  #     password: ""{{ lookup('env', 'DOCKER_PASSWORD') }}""
 
   - name: Pull latest image
     shell: |
