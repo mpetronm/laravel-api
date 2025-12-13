@@ -1,0 +1,65 @@
+- name: Desplegar API Laravel
+  hosts: all
+  become: yes
+  vars:
+    project_dir: /opt/laravel-api
+    docker_image: "{{ docker_image | default('tu-usuario/laravel-api:latest') }}"
+  
+  tasks:
+    - name: Actualizar sistema e instalar dependencias
+      apt:
+        name: 
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+
+    - name: Asegurar que el servicio Docker está corriendo
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Crear directorio de aplicación
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copiar docker-compose de producción
+      copy:
+        src: ../docker-compose.prod.yml
+        dest: "{{ project_dir }}/docker-compose.yml"
+    
+    # Si el registro es privado, descomentar:
+    # - name: Login en Docker Hub
+    #   docker_login:
+    #     username: "{{ lookup('env', 'DOCKER_USERNAME') }}"
+    #     password: "{{ lookup('env', 'DOCKER_PASSWORD') }}"
+
+    - name: Halar última versión de la imagen
+      shell: |
+        cd {{ project_dir }}
+        docker-compose pull
+      environment:
+        DOCKER_IMAGE_NAME: "{{ docker_image }}"
+
+    - name: Desplegar contenedores
+      shell: |
+        cd {{ project_dir }}
+        docker-compose down
+        docker-compose up -d
+      environment:
+        DOCKER_IMAGE_NAME: "{{ docker_image }}"
+        
+    - name: Verificar endpoint de salud
+      uri:
+        url: http://localhost/api/productos
+        method: GET
+        status_code: 200
+        timeout: 30
+      register: health_check
+      until: health_check.status == 200
+      retries: 5
+      delay: 10
+      ignore_errors: yes
