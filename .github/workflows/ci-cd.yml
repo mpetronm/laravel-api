@@ -1,0 +1,108 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 1. Pruebas y Análisis Estático
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, xml, bcmath
+        
+    - name: Install Dependencies
+      run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+      
+    - name: Copy .env
+      run: cp .env.example .env
+      
+    - name: Generate Key
+      run: php artisan key:generate
+      
+    - name: Directory Permissions
+      run: chmod -R 777 storage bootstrap/cache
+      
+    - name: Create SQLite Database
+      run: |
+        touch database/database.sqlite
+        
+    - name: Execute Tests (PHPUnit)
+      env:
+        DB_CONNECTION: sqlite
+        DB_DATABASE: database/database.sqlite
+      run: php artisan test
+      
+    - name: Static Analysis (PHPStan)
+      run: ./vendor/bin/phpstan analyse app tests --memory-limit=2G
+
+  # 2. Construcción y Publicación de Imagen Docker (Solo en push a main)
+  build-push:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        
+    - name: Build and Push
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/laravel-api:latest,${{ secrets.DOCKER_USERNAME }}/laravel-api:${{ github.sha }}
+
+  # 3. Escaneo de Vulnerabilidades (Trivy)
+  scan:
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: '${{ secrets.DOCKER_USERNAME }}/laravel-api:latest'
+        format: 'table'
+        exit-code: '0' # No fallar el pipeline, solo reportar. Cambiar a 1 para forzar fallo.
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'
+
+  # 4. Despliegue (Ansible)
+  deploy:
+    needs: scan
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Run Ansible Playbook
+      uses: dawidd6/action-ansible-playbook@v2
+      with:
+        # El playbook está en la carpeta infra
+        playbook: infra/deploy.yml
+        directory: ./
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        inventory: |
+          [production]
+          ${{ secrets.VM_HOST }} ansible_user=${{ secrets.VM_USER }} ansible_ssh_private_key_file=~/.ssh/id_rsa
+        options: |
+          --extra-vars "docker_image=${{ secrets.DOCKER_USERNAME }}/laravel-api:latest"

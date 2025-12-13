@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    # En producción usamos la imagen construida por CI/CD
+    image: ${DOCKER_IMAGE_NAME:-tu-usuario/laravel-api:latest}
+    restart: always
+    ports:
+      - "80:80"
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=laravel
+      - DB_USERNAME=root
+      - DB_PASSWORD=root # En producción real usar secretos
+    depends_on:
+      - db
+    # No montamos volúmenes de código en producción, solo storage si es necesario persistencia de archivos subidos
+    volumes:
+      - ./storage_prod:/var/www/html/storage
+
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: laravel
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
