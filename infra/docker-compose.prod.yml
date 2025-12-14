@@ -3,7 +3,7 @@ version: '3.8'
 services:
   app:
     # En producción usamos la imagen construida por CI/CD
-    image: ${DOCKER_IMAGE_NAME:-tu-usuario/laravel-api:latest}
+    image: ${DOCKER_IMAGE_NAME:-mpetronm/laravel-api:latest}
     restart: always
     ports:
       - "80:80"

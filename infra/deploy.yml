@@ -41,7 +41,7 @@
       shell: |
         cd {{ project_dir }}
         docker-compose down || true
-        docker-compose up -d
+        DOCKER_IMAGE_NAME="{{ docker_image }}" docker-compose up -d
 
     - name: Fix permissions and migrate DB
       shell: |
